@@ -1,0 +1,130 @@
+import sqlite3
+import os
+import datetime
+import time
+from prettytable import PrettyTable
+import argparse
+import sys
+import csv
+import json
+
+class Task:
+    def __init__(self, task_id=None, title="", description="", due_date=None, 
+                 priority="medium", status="pending", tags=None, created_at=None):
+        self.id = task_id
+        self.title = title
+        self.description = description
+        self.due_date = due_date
+        self.priority = priority
+        self.status = status
+        self.tags = tags or []
+        self.created_at = created_at or datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    def __str__(self):
+        due_date_str = self.due_date if self.due_date else "Not set"
+        tags_str = ", ".join(self.tags) if self.tags else "None"
+        
+        return (f"ID: {self.id}\n"
+                f"Title: {self.title}\n"
+                f"Description: {self.description}\n"
+                f"Due Date: {due_date_str}\n"
+                f"Priority: {self.priority}\n"
+                f"Status: {self.status}\n"
+                f"Tags: {tags_str}\n"
+                f"Created At: {self.created_at}")
+
+class TaskDatabase:
+    def __init__(self, db_path):
+        self.db_path = db_path
+        self.initialize_db()
+    
+    def initialize_db(self):
+        """Create the database and tables if they don't exist."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Create tasks table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            due_date TEXT,
+            priority TEXT,
+            status TEXT,
+            created_at TEXT
+        )
+        ''')
+        
+        # Create tags table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE
+        )
+        ''')
+        
+        # Create task_tags relationship table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS task_tags (
+            task_id INTEGER,
+            tag_id INTEGER,
+            PRIMARY KEY (task_id, tag_id),
+            FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE,
+            FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE
+        )
+        ''')
+        
+        conn.commit()
+        conn.close()
+    
+    def add_task(self, task):
+        """Add a new task to the database."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        INSERT INTO tasks (title, description, due_date, priority, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ''', (task.title, task.description, task.due_date, task.priority, task.status, task.created_at))
+        
+        task_id = cursor.lastrowid
+        
+        # Handle tags
+        for tag_name in task.tags:
+            # Try to find existing tag
+            cursor.execute('SELECT id FROM tags WHERE name = ?', (tag_name,))
+            tag_result = cursor.fetchone()
+            
+            if tag_result:
+                tag_id = tag_result[0]
+            else:
+                # Create new tag
+                cursor.execute('INSERT INTO tags (name) VALUES (?)', (tag_name,))
+                tag_id = cursor.lastrowid
+            
+            # Create relationship
+            cursor.execute('INSERT INTO task_tags (task_id, tag_id) VALUES (?, ?)', (task_id, tag_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return task_id
+    
+    def get_task(self, task_id):
+        """Retrieve a task by its ID."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        SELECT id, title, description, due_date, priority, status, created_at
+        FROM tasks WHERE id = ?
+        ''', (task_id,))
+        
+        task_data = cursor.fetchone()
+        
+        if not task_data:
+            conn.close()
+            return None
+        
+        # Get tags for
