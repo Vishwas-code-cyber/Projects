@@ -1,0 +1,292 @@
+import random
+import time
+import os
+
+class Player:
+    def __init__(self, name):
+        self.name = name
+        self.health = 100
+        self.inventory = []
+        self.current_room = None
+
+class Room:
+    def __init__(self, name, description):
+        self.name = name
+        self.description = description
+        self.exits = {}  # Direction: connected room
+        self.items = []
+        self.enemies = []
+
+class Item:
+    def __init__(self, name, description, effect=None):
+        self.name = name
+        self.description = description
+        self.effect = effect
+
+class Enemy:
+    def __init__(self, name, health, damage):
+        self.name = name
+        self.health = health
+        self.damage = damage
+
+def clear_screen():
+    """Clear the console screen."""
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+def slow_print(text, delay=0.03):
+    """Print text slowly for dramatic effect."""
+    for char in text:
+        print(char, end='', flush=True)
+        time.sleep(delay)
+    print()
+
+def create_world():
+    """Create and connect rooms in the game world."""
+    # Create rooms
+    entrance = Room("Cave Entrance", "A dark cave entrance. Water drips from stalactites above.")
+    main_cavern = Room("Main Cavern", "A large open cavern with glowing mushrooms providing dim light.")
+    crystal_room = Room("Crystal Chamber", "Sparkling crystals cover the walls, casting colorful reflections.")
+    underground_river = Room("Underground River", "A fast-flowing river cuts through the cave. It looks deep.")
+    treasure_room = Room("Ancient Vault", "An ancient chamber filled with forgotten treasures.")
+    
+    # Connect rooms
+    entrance.exits = {"north": main_cavern}
+    main_cavern.exits = {"south": entrance, "east": crystal_room, "west": underground_river}
+    crystal_room.exits = {"west": main_cavern, "north": treasure_room}
+    underground_river.exits = {"east": main_cavern}
+    treasure_room.exits = {"south": crystal_room}
+    
+    # Add items
+    entrance.items.append(Item("torch", "A wooden torch that provides light.", "light"))
+    main_cavern.items.append(Item("mushroom", "A glowing blue mushroom.", "heal"))
+    crystal_room.items.append(Item("crystal shard", "A sharp shard of crystal that glows faintly.", "weapon"))
+    underground_river.items.append(Item("water flask", "An empty flask that can hold water.", "container"))
+    treasure_room.items.append(Item("ancient amulet", "A golden amulet with mysterious symbols.", "protection"))
+    
+    # Add enemies
+    main_cavern.enemies.append(Enemy("Cave Bat", 20, 5))
+    crystal_room.enemies.append(Enemy("Crystal Golem", 50, 10))
+    underground_river.enemies.append(Enemy("Water Elemental", 30, 15))
+    treasure_room.enemies.append(Enemy("Ancient Guardian", 100, 20))
+    
+    return entrance
+
+def show_status(player):
+    """Display player's current status."""
+    print("-" * 50)
+    print(f"Location: {player.current_room.name}")
+    print(f"Health: {player.health}")
+    print("Inventory:", ", ".join([item.name for item in player.inventory]) if player.inventory else "Empty")
+    print("-" * 50)
+
+def describe_room(room):
+    """Display room description, exits, items, and enemies."""
+    slow_print(f"\n{room.description}")
+    
+    # Show exits
+    exits = ", ".join(room.exits.keys())
+    slow_print(f"Exits: {exits}")
+    
+    # Show items
+    if room.items:
+        item_names = ", ".join([item.name for item in room.items])
+        slow_print(f"You see: {item_names}")
+    
+    # Show enemies
+    if room.enemies:
+        enemy_info = ", ".join([f"{enemy.name} (HP: {enemy.health})" for enemy in room.enemies])
+        slow_print(f"Beware of: {enemy_info}")
+
+def get_command():
+    """Get and process player command."""
+    return input("\nWhat would you like to do? ").lower().split()
+
+def move_player(player, direction):
+    """Move player to a new room in the given direction."""
+    if direction in player.current_room.exits:
+        player.current_room = player.current_room.exits[direction]
+        return True
+    else:
+        slow_print("You can't go that way.")
+        return False
+
+def take_item(player, item_name):
+    """Player takes an item from the current room."""
+    for i, item in enumerate(player.current_room.items):
+        if item_name.lower() == item.name.lower():
+            player.inventory.append(item)
+            player.current_room.items.pop(i)
+            slow_print(f"You picked up the {item.name}.")
+            return True
+    slow_print(f"There's no {item_name} here.")
+    return False
+
+def use_item(player, item_name):
+    """Player uses an item from their inventory."""
+    for i, item in enumerate(player.inventory):
+        if item_name.lower() == item.name.lower():
+            if item.effect == "heal":
+                player.health = min(100, player.health + 25)
+                slow_print(f"You used the {item.name}. Your health is now {player.health}.")
+                player.inventory.pop(i)
+                return True
+            elif item.effect == "weapon":
+                slow_print(f"You ready the {item.name} as a weapon.")
+                return True
+            elif item.effect == "light":
+                slow_print(f"The {item.name} illuminates the area around you.")
+                return True
+            elif item.effect == "protection":
+                slow_print(f"The {item.name} glows with protective energy.")
+                return True
+            else:
+                slow_print(f"You're not sure how to use the {item.name}.")
+                return False
+    slow_print(f"You don't have a {item_name}.")
+    return False
+
+def fight_enemy(player, enemy_name):
+    """Player fights an enemy in the current room."""
+    for i, enemy in enumerate(player.current_room.enemies):
+        if enemy_name.lower() == enemy.name.lower():
+            # Simple combat system
+            weapon_bonus = 0
+            for item in player.inventory:
+                if item.effect == "weapon":
+                    weapon_bonus = 10
+                    break
+                
+            protection_bonus = 0
+            for item in player.inventory:
+                if item.effect == "protection":
+                    protection_bonus = 5
+                    break
+            
+            # Player attacks enemy
+            player_damage = random.randint(5, 15) + weapon_bonus
+            enemy.health -= player_damage
+            slow_print(f"You attack the {enemy.name} for {player_damage} damage!")
+            
+            # Check if enemy is defeated
+            if enemy.health <= 0:
+                slow_print(f"You defeated the {enemy.name}!")
+                player.current_room.enemies.pop(i)
+                return True
+            
+            # Enemy attacks player
+            enemy_damage = max(0, enemy.damage - protection_bonus)
+            player.health -= enemy_damage
+            slow_print(f"The {enemy.name} attacks you for {enemy_damage} damage!")
+            
+            # Check if player is defeated
+            if player.health <= 0:
+                slow_print("You have been defeated...")
+                return False
+            
+            return True
+    
+    slow_print(f"There's no {enemy_name} here.")
+    return False
+
+def examine(player, target):
+    """Examine an item, enemy, or the room."""
+    # Check if target is an item in the room
+    for item in player.current_room.items:
+        if target.lower() == item.name.lower():
+            slow_print(f"You examine the {item.name}: {item.description}")
+            return True
+    
+    # Check if target is an enemy in the room
+    for enemy in player.current_room.enemies:
+        if target.lower() == enemy.name.lower():
+            slow_print(f"You carefully observe the {enemy.name}. It has {enemy.health} health and looks dangerous.")
+            return True
+    
+    # Check if target is an item in inventory
+    for item in player.inventory:
+        if target.lower() == item.name.lower():
+            slow_print(f"You examine the {item.name} in your inventory: {item.description}")
+            return True
+    
+    if target.lower() == "room":
+        describe_room(player.current_room)
+        return True
+    
+    slow_print(f"You don't see any {target} to examine.")
+    return False
+
+def main():
+    clear_screen()
+    slow_print("CAVE ADVENTURE", delay=0.1)
+    slow_print("Find the ancient amulet and escape the caves alive!")
+    
+    player_name = input("\nWhat is your name, brave explorer? ")
+    player = Player(player_name)
+    
+    starting_room = create_world()
+    player.current_room = starting_room
+    
+    slow_print(f"\nWelcome, {player.name}! Your adventure begins now...")
+    
+    game_over = False
+    
+    while not game_over:
+        show_status(player)
+        describe_room(player.current_room)
+        
+        cmd = get_command()
+        
+        if len(cmd) == 0:
+            continue
+        
+        action = cmd[0]
+        
+        # Process single word commands
+        if action == "quit":
+            slow_print("Thanks for playing!")
+            game_over = True
+            continue
+        elif action == "look":
+            describe_room(player.current_room)
+            continue
+        elif action == "inventory":
+            if player.inventory:
+                slow_print("You are carrying: " + ", ".join([item.name for item in player.inventory]))
+            else:
+                slow_print("Your inventory is empty.")
+            continue
+        elif action == "help":
+            slow_print("Commands: go [direction], take [item], use [item], fight [enemy], examine [target], inventory, look, help, quit")
+            continue
+        
+        # Process two-word commands
+        if len(cmd) < 2:
+            slow_print("What do you want to do?")
+            continue
+        
+        target = cmd[1]
+        
+        if action == "go":
+            move_player(player, target)
+        elif action == "take":
+            take_item(player, target)
+        elif action == "use":
+            use_item(player, target)
+        elif action == "fight":
+            result = fight_enemy(player, target)
+            if player.health <= 0:
+                slow_print("GAME OVER - You have died in the caves.")
+                game_over = True
+        elif action == "examine":
+            examine(player, target)
+        else:
+            slow_print("I don't understand that command.")
+        
+        # Check win condition
+        if player.current_room.name == "Cave Entrance" and any(item.name == "ancient amulet" for item in player.inventory):
+            slow_print("\nCONGRATULATIONS! You've found the ancient amulet and escaped the caves alive!")
+            slow_print(f"Well done, {player.name}! You've won the game!")
+            game_over = True
+
+if __name__ == "__main__":
+    main()
